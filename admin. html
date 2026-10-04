@@ -1,0 +1,233 @@
+import { auth, db } from "./firebase-init.js";
+import { doc, updateDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { protectPage, clearSession } from "./router.js";
+import { showToast, esc, warnaPeran, inisial, logActivity, hashPassword, openModal } from "./utils.js";
+
+let ME = null;
+
+const AKSEN_LIST = [
+  { id: "indigo", label: "Indigo", color: "#c4c1fb" },
+  { id: "biru", label: "Biru", color: "#7eb8ff" },
+  { id: "hijau", label: "Hijau", color: "#9be89b" },
+  { id: "ungu", label: "Ungu", color: "#d9a7ff" },
+  { id: "merah", label: "Merah", color: "#ff8e8e" },
+  { id: "oranye", label: "Oranye", color: "#ffbe7d" },
+];
+
+const applyTheme = (t) => {
+  const html = document.documentElement;
+  if (t === "light") html.classList.remove("dark");
+  else if (t === "dark") html.classList.add("dark");
+  else html.classList.toggle("dark", window.matchMedia("(prefers-color-scheme: dark)").matches);
+};
+const applyAksen = (a) => {
+  const c = AKSEN_LIST.find((x) => x.id === a)?.color || "#c4c1fb";
+  document.documentElement.style.setProperty("--primary", c);
+};
+const applyAksesibilitas = (v) => {
+  document.documentElement.classList.toggle("aksesibilitas", v);
+  document.body.classList.toggle("kontras-tinggi", v);
+};
+const applyModeFokus = (v) => document.body.classList.toggle("mode-fokus", v);
+const applyHematData = (v) => document.body.classList.toggle("hemat-data", v);
+const applyFontSize = (f) => {
+  document.documentElement.classList.remove("font-besar", "font-sangat-besar");
+  if (f === "besar") document.documentElement.classList.add("font-besar");
+  if (f === "sangat-besar") document.documentElement.classList.add("font-sangat-besar");
+};
+
+async function render() {
+  const c = document.getElementById("content");
+  if (!c) return;
+  const pref = {
+    theme: localStorage.getItem("theme") || "dark",
+    aksen: localStorage.getItem("aksen") || "indigo",
+    aksesibilitas: localStorage.getItem("aksesibilitas") === "1",
+    modeFokus: localStorage.getItem("modeFokus") === "1",
+    hematData: localStorage.getItem("hematData") === "1",
+    fontSize: localStorage.getItem("fontSize") || "normal",
+  };
+
+  c.innerHTML = `
+    <div class="glass rounded-2xl p-5">
+      <h3 class="font-headline font-semibold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">palette</span> Tema & Warna</h3>
+      <div class="mb-4">
+        <p class="text-xs text-on-surface-variant mb-2">Mode Tema</p>
+        <div class="grid grid-cols-3 gap-2">
+          ${[{id:"light",label:"Terang",icon:"light_mode"},{id:"dark",label:"Gelap",icon:"dark_mode"},{id:"auto",label:"Otomatis",icon:"contrast"}].map((m) => `
+            <button data-theme="${m.id}" class="theme-btn p-3 rounded-xl border text-xs font-medium flex flex-col items-center gap-1 ${pref.theme === m.id ? "bg-primary-container text-primary border-primary/40" : "bg-surface-container border-outline-variant/40"}">
+              <span class="material-symbols-outlined">${m.icon}</span>${m.label}
+            </button>`).join("")}
+        </div>
+      </div>
+      <div>
+        <p class="text-xs text-on-surface-variant mb-2">Warna Aksen</p>
+        <div class="flex flex-wrap gap-2">
+          ${AKSEN_LIST.map((a) => `<button data-aksen="${a.id}" class="aksen-btn w-10 h-10 rounded-full border-2 ${pref.aksen === a.id ? "border-white" : "border-transparent"}" style="background:${a.color}" title="${a.label}"></button>`).join("")}
+        </div>
+      </div>
+    </div>
+
+    <div class="glass rounded-2xl p-5">
+      <h3 class="font-headline font-semibold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">accessibility</span> Aksesibilitas</h3>
+      <div class="space-y-3">
+        <label class="flex items-center justify-between p-3 rounded-xl bg-surface-container cursor-pointer">
+          <div><p class="text-sm font-medium">Mode Aksesibilitas</p><p class="text-xs text-on-surface-variant">Font lebih besar, kontras tinggi</p></div>
+          <input type="checkbox" id="t-akses" ${pref.aksesibilitas ? "checked" : ""} class="toggle" />
+        </label>
+        <div class="p-3 rounded-xl bg-surface-container">
+          <p class="text-sm font-medium mb-2">Ukuran Font</p>
+          <div class="grid grid-cols-3 gap-2">
+            ${["normal","besar","sangat-besar"].map((f) => `<button data-font="${f}" class="font-btn px-2 py-2 rounded-lg border text-xs ${pref.fontSize === f ? "bg-primary-container text-primary border-primary/40" : "bg-surface-container-high border-outline-variant/40"}">${f === "normal" ? "Normal" : f === "besar" ? "Besar" : "Sangat Besar"}</button>`).join("")}
+          </div>
+        </div>
+        <label class="flex items-center justify-between p-3 rounded-xl bg-surface-container cursor-pointer">
+          <div><p class="text-sm font-medium">Mode Fokus</p><p class="text-xs text-on-surface-variant">Sembunyikan elemen non-esensial</p></div>
+          <input type="checkbox" id="t-fokus" ${pref.modeFokus ? "checked" : ""} class="toggle" />
+        </label>
+        <label class="flex items-center justify-between p-3 rounded-xl bg-surface-container cursor-pointer">
+          <div><p class="text-sm font-medium">Mode Hemat Data</p><p class="text-xs text-on-surface-variant">Kurangi animasi & gambar</p></div>
+          <input type="checkbox" id="t-hemat" ${pref.hematData ? "checked" : ""} class="toggle" />
+        </label>
+      </div>
+    </div>
+
+    <div class="glass rounded-2xl p-5">
+      <h3 class="font-headline font-semibold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">install_mobile</span> Install Aplikasi</h3>
+      <button id="btn-install" class="w-full py-2.5 rounded-lg bg-primary text-on-primary text-sm font-medium">Install SP-PPT</button>
+      <p id="install-status" class="text-xs text-on-surface-variant mt-2 text-center"></p>
+    </div>
+
+    <div class="glass rounded-2xl p-5">
+      <h3 class="font-headline font-semibold mb-4 flex items-center gap-2"><span class="material-symbols-outlined text-primary">manage_accounts</span> Akun</h3>
+      <div class="space-y-2">
+        <div class="p-3 rounded-xl bg-surface-container"><p class="text-xs text-on-surface-variant">Nama</p><p class="text-sm font-medium">${esc(ME.profile.nama)}</p></div>
+        <div class="p-3 rounded-xl bg-surface-container"><p class="text-xs text-on-surface-variant">Email</p><p class="text-sm font-medium">${esc(ME.profile.email || "-")}</p></div>
+        <div class="p-3 rounded-xl bg-surface-container"><p class="text-xs text-on-surface-variant">Peran</p><p class="text-sm font-medium">${esc(ME.profile.peran)}</p></div>
+      </div>
+    </div>
+
+    <div class="glass rounded-2xl p-5 text-center">
+      <p class="font-headline font-bold text-sm">SP-PPT v2.0.0</p>
+      <p class="text-xs text-on-surface-variant mt-1">Sistem Penilaian & Manajemen Produksi Teater</p>
+      <p class="text-[10px] text-on-surface-variant mt-2">SMP Negeri 10 Samarinda · 2025</p>
+    </div>`;
+
+  // Bind
+  document.querySelectorAll(".theme-btn").forEach((b) => b.addEventListener("click", () => {
+    localStorage.setItem("theme", b.dataset.theme);
+    applyTheme(b.dataset.theme);
+    render();
+    showToast("Tema diubah.", "success");
+  }));
+  document.querySelectorAll(".aksen-btn").forEach((b) => b.addEventListener("click", () => {
+    localStorage.setItem("aksen", b.dataset.aksen);
+    applyAksen(b.dataset.aksen);
+    render();
+    showToast("Warna aksen diubah.", "success");
+  }));
+  document.querySelectorAll(".font-btn").forEach((b) => b.addEventListener("click", () => {
+    localStorage.setItem("fontSize", b.dataset.font);
+    applyFontSize(b.dataset.font);
+    render();
+  }));
+  document.getElementById("t-akses")?.addEventListener("change", (e) => {
+    localStorage.setItem("aksesibilitas", e.target.checked ? "1" : "0");
+    applyAksesibilitas(e.target.checked);
+  });
+  document.getElementById("t-fokus")?.addEventListener("change", (e) => {
+    localStorage.setItem("modeFokus", e.target.checked ? "1" : "0");
+    applyModeFokus(e.target.checked);
+  });
+  document.getElementById("t-hemat")?.addEventListener("change", (e) => {
+    localStorage.setItem("hematData", e.target.checked ? "1" : "0");
+    applyHematData(e.target.checked);
+  });
+  document.getElementById("btn-install")?.addEventListener("click", async () => {
+    const st = document.getElementById("install-status");
+    if (window.deferredPrompt) {
+      window.deferredPrompt.prompt();
+      const { outcome } = await window.deferredPrompt.userChoice;
+      if (st) st.textContent = outcome === "accepted" ? "Aplikasi terinstall!" : "Install dibatalkan";
+      window.deferredPrompt = null;
+    } else {
+      if (st) st.textContent = "Aplikasi sudah terinstall atau browser tidak mendukung.";
+    }
+  });
+}
+
+(async function init() {
+  try {
+    const { uid, profile } = await protectPage();
+    ME = { uid, profile };
+
+    const menu = [
+      { icon: "dashboard", label: "Dashboard", href: "dashboard.html" },
+      { icon: "grade", label: "Nilai", href: "nilai.html" },
+      { icon: "calendar_month", label: "Jadwal", href: "jadwal.html" },
+      { icon: "fact_check", label: "Absensi", href: "absensi.html" },
+      { icon: "checklist", label: "Checklist", href: "checklist.html" },
+      { icon: "campaign", label: "Broadcast", href: "broadcast.html" },
+      { icon: "groups", label: "Struktur", href: "struktur.html" },
+      { icon: "folder", label: "Arsip", href: "arsip.html" },
+      { icon: "support_agent", label: "Aduan", href: "aduan.html" },
+      { icon: "description", label: "Rapor", href: "rapor.html" },
+      { icon: "settings", label: "Pengaturan", href: "pengaturan.html" },
+    ];
+    const nav = document.getElementById("sidebar-nav");
+    if (nav) nav.innerHTML = menu.map((m) => `
+      <a href="${m.href}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg transition text-sm ${m.href === "pengaturan.html" ? "bg-primary-container text-primary font-medium" : "text-on-surface-variant hover:bg-surface-container"}">
+        <span class="material-symbols-outlined text-xl">${m.icon}</span>${m.label}
+      </a>`).join("");
+
+    const av = document.getElementById("header-avatar");
+    if (av) av.textContent = inisial(profile.nama);
+    const badge = document.getElementById("badge-role");
+    if (badge) {
+      badge.className = `hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border ${warnaPeran(profile.peran)}`;
+      badge.textContent = profile.peran;
+    }
+    const bn = document.getElementById("bottom-nav");
+    if (bn) bn.innerHTML = [
+      { icon: "dashboard", label: "Home", href: "dashboard.html" },
+      { icon: "grade", label: "Nilai", href: "nilai.html" },
+      { icon: "calendar_month", label: "Jadwal", href: "jadwal.html" },
+      { icon: "checklist", label: "Tugas", href: "checklist.html" },
+      { icon: "settings", label: "Setting", href: "pengaturan.html" },
+    ].map((i) => `<a href="${i.href}" class="flex flex-col items-center justify-center py-2 text-[10px] gap-0.5 ${i.href === "pengaturan.html" ? "text-primary" : "text-on-surface-variant"}"><span class="material-symbols-outlined text-xl">${i.icon}</span>${i.label}</a>`).join("");
+
+    document.getElementById("btn-logout")?.addEventListener("click", async () => {
+      if (!confirm("Keluar?")) return;
+      await logActivity(ME.uid, "logout").catch(() => {});
+      clearSession();
+      window.location.replace("index.html?logout=1");
+    });
+    document.getElementById("btn-menu")?.addEventListener("click", () => {
+      const sb = document.getElementById("sidebar");
+      if (!sb) return;
+      sb.classList.toggle("hidden"); sb.classList.toggle("flex");
+    });
+
+    // Apply pref
+    applyTheme(localStorage.getItem("theme") || "dark");
+    applyAksen(localStorage.getItem("aksen") || "indigo");
+    applyAksesibilitas(localStorage.getItem("aksesibilitas") === "1");
+    applyModeFokus(localStorage.getItem("modeFokus") === "1");
+    applyHematData(localStorage.getItem("hematData") === "1");
+    applyFontSize(localStorage.getItem("fontSize") || "normal");
+
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      window.deferredPrompt = e;
+      const s = document.getElementById("install-status");
+      if (s) s.textContent = "Siap untuk diinstall!";
+    });
+
+    await render();
+  } catch (e) {
+    console.error("[Pengaturan] Fatal:", e);
+    const c = document.getElementById("content");
+    if (c) c.innerHTML = `<div class="glass rounded-2xl p-8 text-center"><p class="text-sm text-error">${esc(e.message || "Gagal memuat")}</p><button onclick="location.reload()" class="mt-3 px-4 py-2 rounded-lg bg-primary text-on-primary text-sm">Muat Ulang</button></div>`;
+  }
+})();
