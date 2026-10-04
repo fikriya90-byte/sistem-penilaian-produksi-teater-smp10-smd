@@ -1,0 +1,62 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "notifikasi",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "penerimaUid", "order": "ASCENDING" },
+        { "fieldPath": "waktu", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bookingAlat",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "alat", "order": "ASCENDING" },
+        { "fieldPath": "waktuMulai", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tugas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "autoPeran", "order": "ASCENDING" },
+        { "fieldPath": "tahapan", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "penilaian",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "penilaiUid", "order": "ASCENDING" },
+        { "fieldPath": "targetUid", "order": "ASCENDING" },
+        { "fieldPath": "tahapan", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "kehadiran",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sesiId", "order": "ASCENDING" },
+        { "fieldPath": "siswaUid", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "users",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "kelas", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "aduan",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "pengirimUid", "order": "ASCENDING" },
+        { "fieldPath": "waktu", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
