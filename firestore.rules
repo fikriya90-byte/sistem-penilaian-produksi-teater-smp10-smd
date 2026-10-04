@@ -1,0 +1,69 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isLoggedIn() { return request.auth != null; }
+
+    // =========================================================
+    // USERS
+    // =========================================================
+    match /users/{uid} {
+      allow read: if true; // publik untuk struktur
+      allow create: if true; // registrasi via client
+      allow update: if true; // bisa edit sendiri atau admin
+      allow delete: if false;
+    }
+
+    // =========================================================
+    // CLASSES (legacy)
+    // =========================================================
+    match /classes/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // =========================================================
+    // TEACHERS
+    // =========================================================
+    match /teachers/{docId} {
+      allow read: if true;
+      allow write: if false; // admin only via console
+    }
+
+    // =========================================================
+    // PENILAIAN
+    // =========================================================
+    match /penilaian/{docId} {
+      allow read: if true;
+      allow create, update: if true;
+      allow delete: if false;
+    }
+
+    // =========================================================
+    // NOTIFIKASI
+    // =========================================================
+    match /notifikasi/{docId} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if false;
+    }
+
+    // =========================================================
+    // LOGS
+    // =========================================================
+    match /logs/{docId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if false;
+    }
+
+    // =========================================================
+    // KOLEKSI UMUM (read/write terautentikasi)
+    // =========================================================
+    match /{collectionName}/{docId} {
+      allow read, write: if true;
+    }
+  }
+}
