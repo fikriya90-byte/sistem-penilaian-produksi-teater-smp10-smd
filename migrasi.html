@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" /><title>Migrasi Data SP-PPT</title>
+<style>
+  body { font-family: monospace; background: #101415; color: #e0e3e5; padding: 30px; max-width: 900px; margin: auto; }
+  button { padding: 14px 28px; font-size: 16px; background: #c4c1fb; color: #2d2a5b; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  pre { background: #1d2022; padding: 15px; border-radius: 8px; max-height: 500px; overflow: auto; font-size: 13px; margin-top: 20px; }
+  .info { background: #1e1b4b; padding: 15px; border-radius: 8px; margin-bottom: 20px; line-height: 1.6; }
+  .ok { color: #7ed957; }
+  .err { color: #ff8e8e; }
+</style>
+</head>
+<body>
+<h1>Migrasi Data SP-PPT</h1>
+<div class="info">
+  <strong>Skrip ini akan:</strong><br>
+  1. Baca koleksi <code>teachers</code> → tulis ke koleksi <code>users</code><br>
+  2. Baca koleksi <code>classes.students</code> → tulis ke koleksi <code>users</code><br>
+  3. Data asli <strong>tidak dihapus</strong><br><br>
+  <em>Buka DevTools Console untuk melihat detail error jika ada.</em>
+</div>
+<button id="btn-migrasi">Mulai Migrasi</button>
+<pre id="log">Log akan muncul di sini...</pre>
+
+<script type="module">
+import { db } from "./assets/js/firebase-init.js";
+import {
+  collection, getDocs, doc, setDoc, getDoc, serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const logEl = document.getElementById("log");
+const log = (msg, cls = "") => {
+  logEl.textContent += "\n" + msg;
+  logEl.scrollTop = logEl.scrollHeight;
+  console.log(msg);
+};
+
+document.getElementById("btn-migrasi").addEventListener("click", async (e) => {
+  e.target.disabled = true;
+  logEl.textContent = "=== MULAI MIGRASI ===";
+  let okGuru = 0, skipGuru = 0, errGuru = 0;
+  let okSiswa = 0, skipSiswa = 0, errSiswa = 0;
+
+  // ---- 1. GURU ----
+  log("\n--- Baca koleksi teachers ---");
+  try {
+    const tSnap = await getDocs(collection(db, "teachers"));
+    log(`Ditemukan ${tSnap.size} guru`);
+    for (const d of tSnap.docs) {
+      const t = d.data();
+      if (!t.email) { skipGuru++; log(`SKIP: ${d.id} tanpa email`); continue; }
+      const email = t.email.toLowerCase().trim();
+      const uid = `teacher_${email}`;
+      try {
+        const existing = await getDoc(doc(db, "users", uid));
+        if (existing.exists()) { skipGuru++; log(`SKIP: ${email} sudah ada`); continue; }
+        await setDoc(doc(db, "users", uid), {
+          role: "guru", peran: "Guru Pembina",
+          nama: t.name || "Guru", email,
+          whatsapp: t.phone || "", password: t.password || "",
+          kelas: "", divisi: "Guru", migratedAt: serverTimestamp(),
+        });
+        okGuru++; log(`OK: ${t.name || email} → users/${uid}`);
+      } catch (err) { errGuru++; log(`GAGAL: ${email} - ${err.message}`, "err"); }
+    }
+  } catch (err) { log(`FATAL teachers: ${err.message}`, "err"); }
+
+  // ---- 2. SISWA ----
+  log("\n--- Baca koleksi classes ---");
+  try {
+    const cSnap = await getDocs(collection(db, "classes"));
+    log(`Ditemukan ${cSnap.size} kelas`);
+    for (const d of cSnap.docs) {
+      const k = d.data();
+      const students = k.students || [];
+      log(`\nKelas: ${k.name || d.id} (${students.length} siswa)`);
+      for (const s of students) {
+        if (!s.email) { skipSiswa++; continue; }
+        const email = s.email.toLowerCase().trim();
+        const uid = `student_${email}`;
+        try {
+          const existing = await getDoc(doc(db, "users", uid));
+          if (existing.exists()) { skipSiswa++; log(`SKIP: ${email} sudah ada`); continue; }
+          await setDoc(doc(db, "users", uid), {
+            role: "siswa", peran: s.peran || "Pemain",
+            nama: s.name || "Siswa", nis: s.nis || "",
+            kelas: k.name || "", kelasId: d.id, email,
+            whatsapp: s.phone || "", password: s.password || "",
+            divisi: s.divisi || "Pemeran", migratedAt: serverTimestamp(),
+          });
+          okSiswa++; log(`OK: ${s.name || email}`);
+        } catch (err) { errSiswa++; log(`GAGAL: ${email} - ${err.message}`, "err"); }
+      }
+    }
+  } catch (err) { log(`FATAL classes: ${err.message}`, "err"); }
+
+  log("\n=== SELESAI ===");
+  log(`Guru : ${okGuru} OK, ${skipGuru} skip, ${errGuru} gagal`);
+  log(`Siswa: ${okSiswa} OK, ${skipSiswa} skip, ${errSiswa} gagal`);
+  log("\nAnda sekarang bisa login. Password siswa legacy akan diverifikasi secara plaintext saat login pertama.");
+  e.target.disabled = false;
+});
+</script>
+</body>
+</html>
